@@ -4,7 +4,6 @@ import { waitForElement, waitForMedia } from '../../utils/study';
 import { dropdownStyle, playbackRate, volume } from '../../utils/configs';
 import { CommonWorkOptions, $msg, playMedia } from '../../utils';
 import {
-	defaultAnswerWrapperHandler,
 	createDefaultQuestionResolver,
 	RemotePage,
 	QuestionTypes,
@@ -16,6 +15,7 @@ import {
 import { BackgroundProject } from '../background';
 import { $playwright } from '../../utils/app';
 import { answerWrapperEmptyWarning, simplifyWorkResult } from '../../utils/work';
+import { isAIAnswerEnabled, searchAnswersWithAI } from '../../utils/ai';
 
 const state = {
 	current_media: null as HTMLMediaElement | null,
@@ -881,7 +881,7 @@ async function singleQuestionHandle({
 
 	const { answererWrappers, answerSeparators } = CommonProject.scripts.settings.methods.getWorkOptions();
 
-	if (answererWrappers === undefined || answererWrappers.length === 0) {
+	if ((answererWrappers === undefined || answererWrappers.length === 0) && isAIAnswerEnabled() === false) {
 		await answerWrapperEmptyWarning(0);
 		return { finish: false };
 	}
@@ -896,8 +896,8 @@ async function singleQuestionHandle({
 
 	// ====================== 搜题 ======================
 	const searchedInfos = await CommonProject.scripts.apps.methods.searchAnswerInCaches(question, async () => {
-		return defaultAnswerWrapperHandler(answererWrappers, {
-			type: type,
+		return searchAnswersWithAI(answererWrappers, {
+			type: type || 'unknown',
 			title: question
 		});
 	});
@@ -1052,7 +1052,7 @@ async function handleCommonUnitTest(
 		test_type: 'reading-choice' | 'reading-replay' | 'choice' | 'complete';
 	}
 ) {
-	if (opts.answererWrappers === undefined || opts.answererWrappers.length === 0) {
+	if ((opts.answererWrappers === undefined || opts.answererWrappers.length === 0) && isAIAnswerEnabled() === false) {
 		return await answerWrapperEmptyWarning(0);
 	}
 	const visual_state = CommonProject.scripts.render.cfg.visual;
@@ -1083,10 +1083,11 @@ async function handleCommonUnitTest(
 			if (title.trim()) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title.trim(), async () => {
 					await $.sleep((opts.period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(opts.answererWrappers, {
-						type: ctx.type,
+					return searchAnswersWithAI(opts.answererWrappers, {
+						type: ctx.type || 'unknown',
 						title,
-						options: ctx.type === 'completion' ? '' : ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.type === 'completion' ? '' : ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {

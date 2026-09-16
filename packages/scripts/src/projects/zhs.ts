@@ -1,5 +1,6 @@
 import { $ui, Project, Script, $el, h, $$el, $message, $, $modal, MessageElement, $store, $gm } from 'easy-us';
-import { RemotePage, SimplifyWorkResult, OCSWorker, defaultAnswerWrapperHandler } from '@ocsjs/core';
+import { RemotePage, SimplifyWorkResult, OCSWorker } from '@ocsjs/core';
+import { searchAnswersWithAI } from '../utils/ai';
 import { CommonProject } from './common';
 import { workNotes, definition, volume, restudy } from '../utils/configs';
 import {
@@ -2647,10 +2648,11 @@ function gxkWorkAndExam(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -2801,10 +2803,11 @@ function xnkWork({ answererWrappers, period, thread, answerSeparators }: CommonW
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -2918,10 +2921,11 @@ function smartWork(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -3079,10 +3083,11 @@ function smartExam(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -3235,10 +3240,11 @@ function fusioncourseWork(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -3356,10 +3362,11 @@ function hikeWork(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -3485,10 +3492,11 @@ function hikeHomework(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {

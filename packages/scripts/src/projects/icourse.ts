@@ -1,4 +1,5 @@
-import { $, OCSWorker, RemotePage, defaultAnswerWrapperHandler } from '@ocsjs/core';
+import { $, OCSWorker, RemotePage } from '@ocsjs/core';
+import { searchAnswersWithAI } from '../utils/ai';
 import { $message, Project, Script, $ui, $store } from 'easy-us';
 import { CommonWorkOptions, playMedia } from '../utils';
 import { CommonProject } from './common';
@@ -515,10 +516,11 @@ function workAndExam(
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep(5 * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n')
+						options: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {

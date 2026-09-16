@@ -27,11 +27,15 @@ export function workPreCheckMessage(
 		 * 手动关闭时的回调
 		 */
 		onclose?: (opts: CommonWorkOptions, closedMessage: MessageElement) => void;
+		/**
+		 * 使用其他答题方式（例如 AI 大模型）时，没有题库配置也可以继续答题
+		 */
+		ignoreAnswererEmpty?: boolean;
 	}
 ) {
-	const { onrun, onNoAnswererWrappers, onclose, ...opts } = options;
+	const { onrun, onNoAnswererWrappers, onclose, ignoreAnswererEmpty, ...opts } = options;
 
-	if (opts.answererWrappers.length === 0) {
+	if (opts.answererWrappers.length === 0 && ignoreAnswererEmpty !== true) {
 		onNoAnswererWrappers?.(opts);
 		return answerWrapperEmptyWarning(0);
 	} else {

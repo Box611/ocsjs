@@ -2,6 +2,7 @@ import { SimplifyWorkResult, WorkerEvents, WorkResult } from '@ocsjs/core';
 import { $ui, $message, MessageElement, Script, h, CommonEventEmitter, cors, $elements } from 'easy-us';
 import { CommonProject } from '../projects/common';
 import { CommonWorkOptions, workPreCheckMessage } from '.';
+import { isAIAnswerEnabled } from './ai';
 
 export let globalControlPanel: HTMLElement | null = null;
 
@@ -117,6 +118,7 @@ export function commonWork(
 		onNoAnswererWrappers: () => {
 			checkFailed = true;
 		},
+		ignoreAnswererEmpty: isAIAnswerEnabled(),
 		...workOptions,
 		start_delay_seconds: options.start_delay_seconds
 	});

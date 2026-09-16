@@ -1,6 +1,5 @@
 import debounce from 'lodash/debounce';
 import {
-	defaultAnswerWrapperHandler,
 	AnswerWrapperParser,
 	request,
 	SimplifyWorkResult,
@@ -16,6 +15,7 @@ import { enableCopy } from '../utils';
 import { SearchInfosElement } from '../elements/search.infos';
 import { RenderScript } from '../render';
 import { dropdownStyle } from '../utils/configs';
+import { isAIAnswerEnabled, searchAnswersWithAI } from '../utils/ai';
 
 const TAB_WORK_RESULTS_KEY = 'common.work-results.results';
 
@@ -110,7 +110,8 @@ export const CommonProject = Project.create({
 					defaultValue: $ui.notes([
 						'✨鼠标移动到按钮或者输入框，可以看到提示！',
 						'想要自动答题必须设置 “题库配置” ',
-						'设置后进入章节测试，作业，考试页面即可自动答题。'
+						'设置后进入章节测试，作业，考试页面即可自动答题。',
+						'没有题库配置也可以开启下方的 “AI 大模型自动答题”，由 AI 自动作答。'
 					]).outerHTML
 				},
 				answererWrappers: {
@@ -123,7 +124,52 @@ export const CommonProject = Project.create({
 				disabledAnswererWrapperNames: {
 					defaultValue: [] as string[]
 				},
-				answererWrappersButton: {
+			/**
+			 * AI 大模型自动答题
+			 */
+			aiAnswer: {
+				label: 'AI 大模型自动答题',
+				defaultValue: false,
+				attrs: {
+					type: 'checkbox',
+					title:
+						'题库搜不到答案时，调用 AI 大模型 API 自动作答。开启后即使没有配置题库也可以答题。需在下方填写 OpenAI 兼容接口的地址、Key 和模型。'
+				}
+			},
+			aiAnswerUrl: {
+				label: 'AI 接口地址',
+				showIf: 'common.settings.aiAnswer',
+				defaultValue: 'https://api.deepseek.com/v1/chat/completions',
+				attrs: {
+					title: [
+						'OpenAI 兼容的 chat/completions 接口完整地址，例如：',
+						'DeepSeek: https://api.deepseek.com/v1/chat/completions',
+						'Kimi: https://api.moonshot.cn/v1/chat/completions',
+						'通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+						'OpenAI: https://api.openai.com/v1/chat/completions'
+					].join('\n')
+				}
+			},
+			aiAnswerKey: {
+				label: 'AI API Key',
+				showIf: 'common.settings.aiAnswer',
+				defaultValue: '',
+				attrs: { title: '你的 API Key，例如 sk-xxx。留空则请求时不携带 Authorization 头。' }
+			},
+			aiAnswerModel: {
+				label: 'AI 模型',
+				showIf: 'common.settings.aiAnswer',
+				defaultValue: 'deepseek-chat',
+				attrs: { title: '模型名称，例如 deepseek-chat、moonshot-v1-8k、qwen-turbo、gpt-4o-mini。' }
+			},
+			aiAnswerPrompt: {
+				label: '自定义提示词（可选）',
+				showIf: 'common.settings.aiAnswer',
+				tag: 'textarea',
+				defaultValue: '',
+				attrs: { title: '追加在系统提示词之后，例如要求“用中文作答”。', style: { minHeight: '60px' } }
+			},
+			answererWrappersButton: {
 					label: '题库配置',
 					defaultValue: '点击配置',
 					attrs: {
@@ -1266,8 +1312,8 @@ export const CommonProject = Project.create({
 				});
 
 				const search = async (value: string) => {
-					if (CommonProject.scripts.settings.cfg.answererWrappers.length === 0) {
-						$modal.alert({ content: '请先在 通用-全局设置 配置题库，才能进行在线搜题。' });
+					if (CommonProject.scripts.settings.cfg.answererWrappers.length === 0 && isAIAnswerEnabled() === false) {
+						$modal.alert({ content: '请先在 通用-全局设置 配置题库，或者开启 AI 大模型自动答题，才能进行在线搜题。' });
 						return;
 					}
 
@@ -1275,7 +1321,8 @@ export const CommonProject = Project.create({
 
 					if (value) {
 						const t = Date.now();
-						const infos = await defaultAnswerWrapperHandler(CommonProject.scripts.settings.cfg.answererWrappers, {
+						const infos = await searchAnswersWithAI(CommonProject.scripts.settings.cfg.answererWrappers, {
+							type: 'unknown',
 							title: value
 						});
 						// 耗时计算
@@ -1413,7 +1460,8 @@ export const CommonProject = Project.create({
 													title: r.question,
 													answer: res[1],
 													from: i.name.replace(/【题库缓存】/g, ''),
-													homepage: i.homepage || ''
+													homepage: i.homepage || '',
+													ai: (res[2] as any)?.ai
 												}))
 												.flat()
 										)

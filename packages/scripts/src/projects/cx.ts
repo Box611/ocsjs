@@ -2,7 +2,6 @@
 
 import {
 	OCSWorker,
-	defaultAnswerWrapperHandler,
 	$,
 	StringUtils,
 	request,
@@ -24,6 +23,7 @@ import {
 	removeRedundantWords,
 	simplifyWorkResult
 } from '../utils/work';
+import { isAIAnswerEnabled, searchAnswersWithAI } from '../utils/ai';
 import md5 from 'md5';
 // @ts-ignore
 import Typr from 'typr.js';
@@ -310,7 +310,7 @@ export const CXProject = Project.create({
 				}
 			},
 			onrender({ panel }) {
-				if (!CommonProject.scripts.settings.cfg.answererWrappers?.length) {
+				if (!CommonProject.scripts.settings.cfg.answererWrappers?.length && isAIAnswerEnabled() === false) {
 					answerWrapperEmptyWarning(10);
 				}
 
@@ -832,13 +832,15 @@ function workOrExam(
 					const type = (typeInput ? getQuestionType(parseInt(typeInput.value)) : undefined) || 'unknown';
 					return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 						await $.sleep((period ?? 3) * 1000);
-						return defaultAnswerWrapperHandler(answererWrappers, {
+						const options =
+							type === 'completion'
+								? ''
+								: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n');
+						return searchAnswersWithAI(answererWrappers, {
 							type,
 							title,
-							options:
-								type === 'completion'
-									? ''
-									: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n')
+							options,
+							blankCount: ctx.elements.options.length
 						});
 					});
 				} else {
@@ -1579,7 +1581,11 @@ function searchJob(
 								// / 强制学习
 								(work_type === 'not-job' && CommonProject.scripts.settings.cfg['work-when-no-job'])
 							) {
-								if (opts.workOptions.answererWrappers === undefined || opts.workOptions.answererWrappers.length === 0) {
+								if (
+									(opts.workOptions.answererWrappers === undefined ||
+										opts.workOptions.answererWrappers.length === 0) &&
+									isAIAnswerEnabled() === false
+								) {
 									answerWrapperEmptyWarning(0);
 								} else {
 									func = () => {
@@ -1827,7 +1833,7 @@ const JobRunner = {
 			answerSeparators
 		}: CommonWorkOptions
 	) {
-		if (answererWrappers === undefined || answererWrappers.length === 0) {
+		if ((answererWrappers === undefined || answererWrappers.length === 0) && isAIAnswerEnabled() === false) {
 			return answerWrapperEmptyWarning(0);
 		}
 
@@ -1895,13 +1901,15 @@ const JobRunner = {
 
 					return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 						await $.sleep((period ?? 3) * 1000);
-						return defaultAnswerWrapperHandler(answererWrappers, {
+						const options =
+							type === 'completion'
+								? ''
+								: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n');
+						return searchAnswersWithAI(answererWrappers, {
 							type,
 							title,
-							options:
-								type === 'completion'
-									? ''
-									: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n')
+							options,
+							blankCount: ctx.elements.options.length
 						});
 					});
 				} else {

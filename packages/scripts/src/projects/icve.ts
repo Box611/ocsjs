@@ -1,7 +1,6 @@
 import {
 	$,
 	SimplifyWorkResult,
-	defaultAnswerWrapperHandler,
 	OCSWorker,
 	createDefaultQuestionResolver,
 	splitAnswer,
@@ -12,6 +11,7 @@ import { optimizationElementWithImage, commonWork, simplifyWorkResult } from '..
 import { playbackRate, restudy, volume } from '../utils/configs';
 import { CommonWorkOptions, playMedia } from '../utils';
 import { CommonProject } from './common';
+import { searchAnswersWithAI } from '../utils/ai';
 
 import { $console, BackgroundProject } from './background';
 import { waitForElement, waitForMedia } from '../utils/study';
@@ -827,10 +827,11 @@ function work({ answererWrappers, period, thread, answerSeparators }: CommonWork
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: getType(ctx.elements.options) || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
@@ -1004,10 +1005,11 @@ function aiWork({ answererWrappers, period, thread, answerSeparators }: CommonWo
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: getType(ctx.elements.options) || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n')
+						options: ctx.elements.options.map((o) => optimizationElementWithImage(o, true).innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {

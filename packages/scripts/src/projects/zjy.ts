@@ -1,4 +1,5 @@
-import { $, OCSWorker, defaultAnswerWrapperHandler } from '@ocsjs/core';
+import { $, OCSWorker } from '@ocsjs/core';
+import { searchAnswersWithAI } from '../utils/ai';
 import { Project, Script, $ui, $el, $message, $modal, h } from 'easy-us';
 import { volume } from '../utils/configs';
 import { waitForMedia, waitForElement } from '../utils/study';
@@ -667,10 +668,11 @@ function workOrExam(type: 'work' | 'exam', { answererWrappers, period, thread, a
 			if (title) {
 				return CommonProject.scripts.apps.methods.searchAnswerInCaches(title, async () => {
 					await $.sleep((period ?? 3) * 1000);
-					return defaultAnswerWrapperHandler(answererWrappers, {
+					return searchAnswersWithAI(answererWrappers, {
 						type: ctx.type || 'unknown',
 						title,
-						options: ctx.elements.options.map((o) => o.innerText).join('\n')
+						options: ctx.elements.options.map((o) => o.innerText).join('\n'),
+						blankCount: ctx.elements.options.length
 					});
 				});
 			} else {
