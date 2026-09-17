@@ -15,7 +15,8 @@ import { enableCopy } from '../utils';
 import { SearchInfosElement } from '../elements/search.infos';
 import { RenderScript } from '../render';
 import { dropdownStyle } from '../utils/configs';
-import { isAIAnswerEnabled, searchAnswersWithAI } from '../utils/ai';
+import { getAIAnswerConfig, isAIAnswerEnabled, searchAnswersWithAI, testAIConnection } from '../utils/ai';
+import { AI_PROVIDERS, createDocLink, DEFAULT_AI_PROVIDER_ID, getAIProvider } from '../utils/ai-providers';
 
 const TAB_WORK_RESULTS_KEY = 'common.work-results.results';
 
@@ -68,10 +69,19 @@ const state = {
 	},
 	setting: {
 		listenerIds: {
-			aw: 0 as StoreListenerType
+			aw: 0 as StoreListenerType,
+			ai: [] as (number | void)[]
 		}
 	}
 };
+
+/**
+ * 刷新「当前模型」显示
+ *
+ * 由于配置元素在每次面板渲染时都会重新创建，这里保存最新一次创建时的刷新函数，
+ * 由 settings 脚本的 oncomplete 统一监听配置变化后调用。
+ */
+let renderAISummary: () => void = () => {};
 
 /**
  * 题库缓存类型
@@ -124,52 +134,87 @@ export const CommonProject = Project.create({
 				disabledAnswererWrapperNames: {
 					defaultValue: [] as string[]
 				},
-			/**
-			 * AI 大模型自动答题
-			 */
-			aiAnswer: {
-				label: 'AI 大模型自动答题',
-				defaultValue: false,
-				attrs: {
-					type: 'checkbox',
-					title:
-						'题库搜不到答案时，调用 AI 大模型 API 自动作答。开启后即使没有配置题库也可以答题。需在下方填写 OpenAI 兼容接口的地址、Key 和模型。'
-				}
-			},
-			aiAnswerUrl: {
-				label: 'AI 接口地址',
-				showIf: 'common.settings.aiAnswer',
-				defaultValue: 'https://api.deepseek.com/v1/chat/completions',
-				attrs: {
-					title: [
-						'OpenAI 兼容的 chat/completions 接口完整地址，例如：',
-						'DeepSeek: https://api.deepseek.com/v1/chat/completions',
-						'Kimi: https://api.moonshot.cn/v1/chat/completions',
-						'通义千问: https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-						'OpenAI: https://api.openai.com/v1/chat/completions'
-					].join('\n')
-				}
-			},
-			aiAnswerKey: {
-				label: 'AI API Key',
-				showIf: 'common.settings.aiAnswer',
-				defaultValue: '',
-				attrs: { title: '你的 API Key，例如 sk-xxx。留空则请求时不携带 Authorization 头。' }
-			},
-			aiAnswerModel: {
-				label: 'AI 模型',
-				showIf: 'common.settings.aiAnswer',
-				defaultValue: 'deepseek-chat',
-				attrs: { title: '模型名称，例如 deepseek-chat、moonshot-v1-8k、qwen-turbo、gpt-4o-mini。' }
-			},
-			aiAnswerPrompt: {
-				label: '自定义提示词（可选）',
-				showIf: 'common.settings.aiAnswer',
-				tag: 'textarea',
-				defaultValue: '',
-				attrs: { title: '追加在系统提示词之后，例如要求“用中文作答”。', style: { minHeight: '60px' } }
-			},
-			answererWrappersButton: {
+				/**
+				 * AI 大模型自动答题
+				 */
+				aiAnswer: {
+					label: 'AI 大模型自动答题',
+					defaultValue: false,
+					attrs: {
+						type: 'checkbox',
+						title: '题库搜不到答案时，调用 AI 大模型 API 自动作答。开启后即使没有配置题库也可以答题。'
+					}
+				},
+				aiAnswerModelsButton: {
+					label: 'AI 模型配置',
+					showIf: 'common.settings.aiAnswer',
+					defaultValue: '点击添加模型',
+					attrs: { type: 'button' },
+					onload() {
+						const refresh = () => {
+							const model = CommonProject.scripts.settings.cfg.aiAnswerModel;
+							this.value = model ? `${model}（点击修改）` : '点击添加模型';
+						};
+						refresh();
+						this.onclick = () => openAIModelModal(refresh);
+					}
+				},
+				aiAnswerSummary: {
+					label: '当前模型',
+					showIf: 'common.settings.aiAnswer',
+					defaultValue: '',
+					attrs: { disabled: true, style: { fontSize: '12px' } },
+					onload(el) {
+						// 元素会在面板每次渲染时重新创建，因此这里把刷新函数挂到模块级变量，
+						// 由 settings 脚本的 oncomplete 统一监听配置变化后调用。
+						renderAISummary = () => {
+							const cfg = getAIAnswerConfig();
+							const hasKey = cfg.apiKey ? '已填写' : '未填写';
+							el.value = `${cfg.provider.name} / ${cfg.model || '未选择'} / API Key ${hasKey}`;
+							el.setAttribute('data-title', `请求地址：${cfg.endpoint || '未配置'}`);
+						};
+						renderAISummary();
+					}
+				},
+				aiAnswerProvider: {
+					label: '供应商',
+					showIf: 'common.settings.aiAnswer',
+					defaultValue: DEFAULT_AI_PROVIDER_ID,
+					attrs: { style: { display: 'none' } }
+				},
+				aiAnswerUrl: {
+					label: 'AI 接口地址',
+					showIf: 'common.settings.aiAnswer',
+					defaultValue: '',
+					attrs: {
+						placeholder: '留空则使用所选供应商的默认地址',
+						title: [
+							'一般无需填写，选择供应商后会自动使用其官方地址。',
+							'如需使用中转/代理接口，请在此填写完整的 chat/completions 地址，',
+							'或者只填基础地址（脚本会自动补全 /chat/completions）。'
+						].join('\n')
+					}
+				},
+				aiAnswerKey: {
+					label: 'AI API Key',
+					showIf: 'common.settings.aiAnswer',
+					defaultValue: '',
+					attrs: { title: '你的 API Key，例如 sk-xxx。仅在本地保存，不会上传到任何服务器。' }
+				},
+				aiAnswerModel: {
+					label: 'AI 模型',
+					showIf: 'common.settings.aiAnswer',
+					defaultValue: '',
+					attrs: { title: '点击上方「AI 模型配置」按钮，选择供应商与模型名称。' }
+				},
+				aiAnswerPrompt: {
+					label: '自定义提示词（可选）',
+					showIf: 'common.settings.aiAnswer',
+					tag: 'textarea',
+					defaultValue: '',
+					attrs: { title: '追加在系统提示词之后，例如要求“用中文作答”。', style: { minHeight: '60px' } }
+				},
+				answererWrappersButton: {
 					label: '题库配置',
 					defaultValue: '点击配置',
 					attrs: {
@@ -763,6 +808,25 @@ export const CommonProject = Project.create({
 				this.onConfigChange('answerWrapperHandlerTimeout', (sec) => {
 					AnswerWrapperHandlerConfig.timeout_seconds = sec;
 				});
+
+				// 旧的 AI 配置迁移：没有供应商标识时，根据历史接口地址自动推断并补全模型
+				if (!this.cfg.aiAnswerProvider) {
+					const cfg = getAIAnswerConfig();
+					this.cfg.aiAnswerProvider = cfg.providerId;
+					if (!this.cfg.aiAnswerModel) {
+						this.cfg.aiAnswerModel = cfg.model;
+					}
+				}
+
+				// AI 配置变化时刷新「当前模型」显示
+				for (const id of state.setting.listenerIds.ai) {
+					this.offConfigChange(id);
+				}
+				state.setting.listenerIds.ai = [
+					this.onConfigChange('aiAnswerProvider', () => renderAISummary()),
+					this.onConfigChange('aiAnswerModel', () => renderAISummary()),
+					this.onConfigChange('aiAnswerKey', () => renderAISummary())
+				];
 			},
 			onrender({ panel }) {
 				// 因为需要用到 GM_xhr 所以判断是否处于用户脚本环境
@@ -1695,6 +1759,221 @@ function insertCopyableStyle() {
 		}`;
 
 	document.head.append(style);
+}
+
+/**
+ * 打开「AI 模型配置」弹窗
+ *
+ * 提供与主流 AI 客户端一致的配置体验：
+ * 选择供应商（OpenAI 兼容协议）-> 填写 API Key -> 测试连接 -> 选择模型名称。
+ *
+ * @param onSaved 保存成功后的回调，用于刷新调用方按钮上的文案
+ */
+function openAIModelModal(onSaved?: () => void) {
+	const cfg = CommonProject.scripts.settings.cfg;
+
+	/** 当前已有的配置，用于回填表单 */
+	const currentProviderId = String(cfg.aiAnswerProvider || '').trim() || DEFAULT_AI_PROVIDER_ID;
+	const currentUrl = String(cfg.aiAnswerUrl || '').trim();
+	const currentApiKey = String(cfg.aiAnswerKey || '').trim();
+	const currentModel = String(cfg.aiAnswerModel || '').trim();
+
+	// ---------- 供应商 ----------
+	const providerSelect = h('select', { className: 'ai-form-control' });
+	providerSelect.style.width = '100%';
+	for (const p of AI_PROVIDERS) {
+		const option = h('option', p.name);
+		option.value = p.id;
+		if (p.id === currentProviderId) {
+			option.selected = true;
+		}
+		providerSelect.append(option);
+	}
+	$ui.tooltip(providerSelect);
+
+	const providerDocsRow = h('div', { className: 'ai-docs-row' });
+
+	// ---------- 接口地址 ----------
+	const urlInput = h('input', {
+		className: 'ai-form-control',
+		placeholder: '留空则使用供应商默认地址'
+	});
+	urlInput.value = currentUrl;
+	urlInput.style.width = '100%';
+
+	// ---------- API Key ----------
+	const keyInput = h('input', {
+		className: 'ai-form-control',
+		placeholder: '输入你的 API Key'
+	});
+	keyInput.value = currentApiKey;
+	keyInput.style.width = '100%';
+	keyInput.type = 'password';
+
+	// 显示/隐藏 API Key
+	const toggleKeyVisible = $ui.tooltip(h('span', { className: 'ai-inline-btn', title: '显示 / 隐藏 API Key' }, '👁'));
+	toggleKeyVisible.onclick = () => {
+		keyInput.type = keyInput.type === 'password' ? 'text' : 'password';
+	};
+
+	// 测试连接
+	const testBtn = h('button', { className: 'modal-cancel-button ai-test-btn' }, '测试连接');
+	const testResult = h('div', { className: 'ai-test-result secondary' });
+
+	testBtn.onclick = async () => {
+		const provider = getAIProvider(providerSelect.value);
+		const model = (modelInput.value || '').trim();
+		if (!model) {
+			$message.warn({ content: '请先选择或输入模型名称，再测试连接。', duration: 5 });
+			return;
+		}
+		if (!keyInput.value.trim()) {
+			$message.warn({ content: '请先填写 API Key，再测试连接。', duration: 5 });
+			return;
+		}
+
+		testBtn.disabled = true;
+		testBtn.textContent = '测试中...';
+		testResult.textContent = '';
+		testResult.className = 'ai-test-result secondary';
+		testResult.textContent = '正在连接，请稍候...';
+
+		const res = await testAIConnection({
+			providerId: provider.id,
+			url: urlInput.value.trim(),
+			apiKey: keyInput.value.trim(),
+			model
+		});
+
+		testBtn.disabled = false;
+		testBtn.textContent = '测试连接';
+		testResult.textContent = res.message + (res.latency ? `（${res.latency}ms）` : '');
+		testResult.className = 'ai-test-result ' + (res.success ? 'ai-test-success' : 'ai-test-error');
+	};
+
+	// ---------- 模型名称 ----------
+	const modelInput = h('input', {
+		className: 'ai-form-control',
+		placeholder: '输入或选择模型名称'
+	});
+	modelInput.value = currentModel;
+	modelInput.style.width = '100%';
+
+	const modelSelect = h('select', { className: 'ai-form-control' });
+	modelSelect.style.width = '100%';
+	modelSelect.style.marginTop = '6px';
+
+	/** 刷新供应商相关的联动内容（默认地址、文档、模型列表） */
+	const refreshProvider = () => {
+		const provider = getAIProvider(providerSelect.value);
+
+		// 文档与密钥地址
+		providerDocsRow.replaceChildren();
+		if (provider.docs || provider.keyUrl) {
+			providerDocsRow.append(h('span', { className: 'secondary' }, provider.name + '：'));
+			if (provider.docs) {
+				providerDocsRow.append(createDocLink(provider.docs, '查看文档'));
+			}
+			if (provider.keyUrl) {
+				providerDocsRow.append(createDocLink(provider.keyUrl, '获取 API Key'));
+			}
+		}
+
+		// 模型下拉（第一项为占位提示，不参与选择）
+		modelSelect.replaceChildren();
+		const placeholder = h('option', provider.models.length ? '选择常用模型 ↓' : '该供应商需手动输入模型名称');
+		placeholder.value = '';
+		modelSelect.append(placeholder);
+		for (const m of provider.models) {
+			const option = h('option', m);
+			option.value = m;
+			modelSelect.append(option);
+		}
+
+		// 自定义供应商时提示填写接口地址
+		if (provider.baseUrl) {
+			urlInput.placeholder = `留空则使用默认地址：${provider.baseUrl}`;
+		} else {
+			urlInput.placeholder = '请填写完整的 OpenAI 兼容接口地址，例如 https://api.xxx.com/v1/chat/completions';
+		}
+	};
+
+	modelSelect.onchange = () => {
+		if (modelSelect.value) {
+			modelInput.value = modelSelect.value;
+		}
+	};
+
+	providerSelect.onchange = () => {
+		const provider = getAIProvider(providerSelect.value);
+		// 切换供应商时清空自定义地址，使用新供应商的默认地址
+		if (provider.baseUrl) {
+			urlInput.value = '';
+		}
+		// 自动切换为供应商的默认模型
+		if (provider.models.length) {
+			modelInput.value = provider.models[0];
+		}
+		refreshProvider();
+	};
+
+	refreshProvider();
+
+	// ---------- 组装弹窗 ----------
+	const field = (label: string, content: HTMLElement[], extra?: HTMLElement) => {
+		const row: HTMLElement[] = extra ? content.concat([extra]) : content;
+		return h('div', { className: 'ai-form-field' }, [
+			h('div', { className: 'ai-form-label' }, label),
+			h('div', { className: 'ai-form-body' }, [h('div', { className: 'ai-form-row' }, row)])
+		]);
+	};
+
+	const tip = h(
+		'div',
+		{ className: 'secondary', style: { marginBottom: '12px', fontSize: '12px', lineHeight: '18px' } },
+		'仅支持 OpenAI 兼容协议的 API（即 POST /chat/completions），配置完成后可在下方「测试连接」验证是否可用。'
+	);
+
+	const modal = $modal.confirm({
+		width: 560,
+		maskCloseable: false,
+		title: '添加模型',
+		confirmButtonText: '保存配置',
+		cancelButtonText: '取消',
+		content: h('div', { className: 'ai-model-modal' }, [
+			tip,
+			field('供应商', [providerSelect]),
+			providerDocsRow,
+			field('接口地址（可选）', [urlInput]),
+			field('API Key', [keyInput], h('div', { className: 'ai-key-actions' }, [toggleKeyVisible, testBtn])),
+			field('模型名称', [h('div', { style: { width: '100%' } }, [modelInput, modelSelect])]),
+			testResult
+		]),
+		async onConfirm() {
+			const provider = getAIProvider(providerSelect.value);
+			const model = (modelInput.value || '').trim();
+			const url = urlInput.value.trim();
+
+			if (!model) {
+				$message.warn({ content: '请选择或输入模型名称。', duration: 5 });
+				return false;
+			}
+			if (!url && !provider.baseUrl) {
+				$message.warn({ content: '自定义供应商必须填写接口地址。', duration: 5 });
+				return false;
+			}
+
+			CommonProject.scripts.settings.cfg.aiAnswerProvider = provider.id;
+			CommonProject.scripts.settings.cfg.aiAnswerUrl = url;
+			CommonProject.scripts.settings.cfg.aiAnswerKey = keyInput.value.trim();
+			CommonProject.scripts.settings.cfg.aiAnswerModel = model;
+
+			$message.success({ content: `已保存：${provider.name} / ${model}`, duration: 5 });
+			onSaved?.();
+		}
+	});
+
+	return modal;
 }
 
 function createAnswererWrapperList(aw: AnswererWrapper[]) {

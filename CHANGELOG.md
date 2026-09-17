@@ -9,6 +9,17 @@
 
 
 
+## [4.15.4](https://github.com/Box611/ocsjs/compare/4.15.3...4.15.4) (2026-09-17)
+
+
+### Features
+
+* **script:** AI 大模型自动答题升级为「供应商 + API Key」配置表单，新增 9 家内置供应商预设（DeepSeek / 腾讯云 Token Plan / Moonshot / 通义千问 / 智谱 / 硅基流动 / OpenAI / Ollama / 自定义）
+* **script:** 新增「添加模型」弹窗，支持供应商下拉、查看官方文档跳转、API Key 密码框（可显隐）
+* **script:** 新增「测试连接」功能，实时校验 API Key 可用性并返回延迟与中文错误提示
+* **script:** 新增模型名称预设下拉，支持从供应商预设中选择或手动填写
+* **script:** 设置页新增「当前模型」只读回显，并兼容旧版 aiAnswerUrl 配置自动迁移
+
 ## [4.15.3](https://github.com/ocsjs/ocsjs/compare/4.15.2...4.15.3) (2026-07-01)
 
 

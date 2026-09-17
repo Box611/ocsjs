@@ -1,0 +1,2 @@
+﻿ocsjs-4.0/packages/scripts/src/projects/common.ts(1,22): error TS7016: Could not find a declaration file for module 'lodash/debounce'. 'D:/download/ocsjs-4.0/ocsjs-4.0/node_modules/.pnpm/lodash@4.17.23/node_modules/lodash/debounce.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/lodash` if it exists or add a new declaration (.d.ts) file containing `declare module 'lodash/debounce';`

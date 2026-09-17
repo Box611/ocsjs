@@ -1,6 +1,8 @@
 import { AnswerWrapperHandlerConfig, defaultAnswerWrapperHandler, request, $ } from '@ocsjs/core';
 import type { AnswererWrapper, SearchInformation } from '@ocsjs/core';
 import { CommonProject } from '../projects/common';
+import { createAIHeaders, DEFAULT_AI_PROVIDER_ID, getAIProvider, resolveAIEndpoint } from './ai-providers';
+import type { AIProvider } from './ai-providers';
 
 /**
  * AI 大模型答题配置
@@ -9,22 +11,70 @@ import { CommonProject } from '../projects/common';
  */
 export interface AIAnswerConfig {
 	enabled: boolean;
+	/** 供应商标识 */
+	providerId: string;
+	/** 供应商预设 */
+	provider: AIProvider;
+	/** 用户填写的接口地址（可能为空，此时使用供应商预设地址） */
 	url: string;
+	/** 最终解析出的 chat/completions 请求地址 */
+	endpoint: string;
 	apiKey: string;
 	model: string;
 	prompt: string;
 }
 
-/** 读取全局设置中的 AI 大模型配置 */
+/**
+ * 读取全局设置中的 AI 大模型配置
+ *
+ * 兼容旧版本只配置了 aiAnswerUrl 而没有配置供应商的情况：
+ * 会自动根据历史接口地址推断供应商。
+ */
 export function getAIAnswerConfig(): AIAnswerConfig {
 	const cfg = CommonProject.scripts.settings.cfg;
+	const url = String(cfg.aiAnswerUrl || '').trim();
+	let providerId = String(cfg.aiAnswerProvider || '').trim();
+
+	// 旧配置迁移：没有供应商时根据历史接口地址推断
+	if (!providerId) {
+		providerId = guessProviderId(url);
+	}
+
+	const provider = getAIProvider(providerId);
+
 	return {
 		enabled: cfg.aiAnswer === true,
-		url: String(cfg.aiAnswerUrl || '').trim(),
+		providerId: provider.id,
+		provider,
+		url,
+		endpoint: resolveAIEndpoint(provider, url),
 		apiKey: String(cfg.aiAnswerKey || '').trim(),
-		model: String(cfg.aiAnswerModel || '').trim(),
+		model: String(cfg.aiAnswerModel || '').trim() || provider.models[0] || '',
 		prompt: String(cfg.aiAnswerPrompt || '').trim()
 	};
+}
+
+/** 根据历史接口地址推断供应商标识（用于旧配置兼容） */
+function guessProviderId(url: string): string {
+	if (!url) {
+		return DEFAULT_AI_PROVIDER_ID;
+	}
+	const rules: [RegExp, string][] = [
+		[/deepseek\.com/i, 'deepseek'],
+		[/lkeap|tencent/i, 'tencent-token-plan'],
+		[/moonshot\.cn/i, 'moonshot'],
+		[/dashscope\.aliyuncs\.com/i, 'qwen'],
+		[/bigmodel\.cn/i, 'zhipu'],
+		[/siliconflow\.cn/i, 'siliconflow'],
+		[/api\.openai\.com/i, 'openai'],
+		[/localhost:11434|127\.0\.0\.1:11434/i, 'ollama']
+	];
+	for (const [pattern, id] of rules) {
+		if (pattern.test(url)) {
+			return id;
+		}
+	}
+	return 'custom';
 }
 
 /** 是否开启了 AI 大模型自动答题 */
@@ -50,6 +100,158 @@ const AI_SYSTEM_PROMPT = [
 ].join('\n');
 
 /**
+ * 向 OpenAI 兼容接口发起 chat/completions 请求
+ *
+ * 优先使用 GM_xmlhttpRequest（用户脚本环境），失败后降级 fetch 重试。
+ *
+ * @param opts 请求参数
+ * @returns 接口返回的原始 JSON 数据
+ */
+export async function requestAIChat(opts: {
+	endpoint: string;
+	provider: AIProvider;
+	apiKey: string;
+	model: string;
+	/** 是否要求模型返回 JSON 对象 */
+	messages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+	/** 超时时间（毫秒），默认使用答题器的超时时间 */
+	timeout?: number;
+	temperature?: number;
+	/** 要求返回 json 对象（部分供应商不支持，默认关闭） */
+	silent?: boolean;
+}): Promise<any> {
+	const { endpoint, provider, apiKey, model, messages } = opts;
+	if (!endpoint) {
+		throw new Error('未配置 AI 接口地址，请前往 通用-全局设置 中的 AI 大模型自动答题进行配置。');
+	}
+	if (!model) {
+		throw new Error('未配置 AI 模型，请前往 通用-全局设置 中的 AI 大模型自动答题进行配置。');
+	}
+
+	const headers = createAIHeaders(provider, apiKey);
+
+	const data = {
+		model,
+		messages,
+		temperature: opts.temperature ?? 0,
+		stream: false
+	};
+
+	const timeout = opts.timeout ?? AnswerWrapperHandlerConfig.timeout_seconds * 1000;
+
+	let response: any;
+	// eslint-disable-next-line no-undef
+	if (typeof GM_xmlhttpRequest !== 'undefined') {
+		try {
+			response = await Promise.race([
+				request(endpoint, {
+					type: 'GM_xmlhttpRequest',
+					method: 'post',
+					responseType: 'json',
+					headers,
+					data
+				}),
+				$.sleep(timeout)
+			]);
+		} catch (e) {
+			if (!opts.silent) {
+				console.warn('[ocsjs] AI 接口 GM_xmlhttpRequest 请求失败，尝试使用 fetch 重试 : ', e);
+			}
+		}
+	}
+	if (response === undefined) {
+		try {
+			response = await Promise.race([
+				request(endpoint, {
+					type: 'fetch',
+					method: 'post',
+					responseType: 'json',
+					headers,
+					data
+				}),
+				$.sleep(timeout)
+			]);
+		} catch (e) {
+			if (!opts.silent) {
+				console.warn('[ocsjs] AI 接口 fetch 请求失败 : ', e);
+			}
+		}
+	}
+	if (response === undefined) {
+		throw new Error('AI 接口请求超时，请检查接口地址与网络后重试。');
+	}
+
+	// 接口返回错误
+	if (response?.error?.message) {
+		throw new Error('AI 接口返回错误：' + response.error.message);
+	}
+	// 部分供应商会把错误放在 code / message 中
+	if (response?.code && response?.message && response?.choices === undefined) {
+		throw new Error(`AI 接口返回错误（${response.code}）：${response.message}`);
+	}
+
+	return response;
+}
+
+/**
+ * 测试 AI 模型连接
+ *
+ * 发送一条极短的请求，用于校验 API Key、模型名称和接口地址是否正确。
+ * 不会抛出异常，而是返回统一的结果对象，方便 UI 直接展示。
+ */
+export async function testAIConnection(opts: {
+	providerId: string;
+	url: string;
+	apiKey: string;
+	model: string;
+}): Promise<{ success: boolean; message: string; latency?: number }> {
+	const provider = getAIProvider(opts.providerId);
+	const endpoint = resolveAIEndpoint(provider, opts.url);
+	const start = Date.now();
+
+	try {
+		const response = await requestAIChat({
+			endpoint,
+			provider,
+			apiKey: opts.apiKey,
+			model: opts.model,
+			messages: [
+				{ role: 'system', content: '你是一个测试助手，只需要回复 ok。' },
+				{ role: 'user', content: '请回复 ok' }
+			],
+			timeout: 20000,
+			silent: true
+		});
+
+		const content = extractAIContent(response);
+		if (!content) {
+			// 有返回但内容为空，说明接口通了，可能是模型不支持该参数
+			const usage = response?.usage;
+			if (usage) {
+				return { success: true, message: '连接成功（模型已响应）', latency: Date.now() - start };
+			}
+			return { success: false, message: '连接成功但返回内容为空，请检查模型名称是否正确。' };
+		}
+		return { success: true, message: `连接成功，模型回复：${content.slice(0, 20)}`, latency: Date.now() - start };
+	} catch (e: any) {
+		const message = String(e?.message || e);
+		if (/401|Unauthorized|invalid.*key|api.?key/i.test(message)) {
+			return { success: false, message: '连接失败：API Key 无效或未授权（401）。' };
+		}
+		if (/403|Forbidden/i.test(message)) {
+			return { success: false, message: '连接失败：无权限访问该模型（403），请确认模型是否已开通。' };
+		}
+		if (/404|model.*not.*found/i.test(message)) {
+			return { success: false, message: '连接失败：接口地址或模型名称不存在（404），请检查。' };
+		}
+		if (/timeout|超时/i.test(message)) {
+			return { success: false, message: '连接失败：请求超时，请检查网络或接口地址。' };
+		}
+		return { success: false, message: '连接失败：' + message };
+	}
+}
+
+/**
  * AI 大模型作答
  *
  * 调用 OpenAI 兼容的 chat/completions 接口（DeepSeek / Kimi / 通义千问 / OpenAI 等），
@@ -65,7 +267,7 @@ export async function aiAnswer(env: {
 	blankCount?: number;
 }): Promise<SearchInformation> {
 	const cfg = getAIAnswerConfig();
-	if (!cfg.url) {
+	if (!cfg.endpoint) {
 		throw new Error('未配置 AI 接口地址，请前往 通用-全局设置 填写。');
 	}
 	if (!cfg.model) {
@@ -87,60 +289,16 @@ export async function aiAnswer(env: {
 	lines.push('请输出答案：');
 	const userMessage = lines.join('\n');
 
-	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-	if (cfg.apiKey) {
-		headers['Authorization'] = cfg.apiKey.startsWith('Bearer ') ? cfg.apiKey : `Bearer ${cfg.apiKey}`;
-	}
-
-	const data = {
+	const response = await requestAIChat({
+		endpoint: cfg.endpoint,
+		provider: cfg.provider,
+		apiKey: cfg.apiKey,
 		model: cfg.model,
 		messages: [
 			{ role: 'system', content: AI_SYSTEM_PROMPT + (cfg.prompt ? `\n${cfg.prompt}` : '') },
 			{ role: 'user', content: userMessage }
-		],
-		temperature: 0,
-		stream: false
-	};
-
-	// 优先使用 GM_xmlhttpRequest（用户脚本环境），失败后降级 fetch 重试
-	let response: any;
-	// eslint-disable-next-line no-undef
-	if (typeof GM_xmlhttpRequest !== 'undefined') {
-		try {
-			response = await Promise.race([
-				request(cfg.url, {
-					type: 'GM_xmlhttpRequest',
-					method: 'post',
-					responseType: 'json',
-					headers,
-					data
-				}),
-				$.sleep(AnswerWrapperHandlerConfig.timeout_seconds * 1000)
-			]);
-		} catch (e) {
-			console.warn('[ocsjs] AI 接口 GM_xmlhttpRequest 请求失败，尝试使用 fetch 重试 : ', e);
-		}
-	}
-	if (response === undefined) {
-		response = await Promise.race([
-			request(cfg.url, {
-				type: 'fetch',
-				method: 'post',
-				responseType: 'json',
-				headers,
-				data
-			}),
-			$.sleep(AnswerWrapperHandlerConfig.timeout_seconds * 1000)
-		]);
-	}
-	if (response === undefined) {
-		throw new Error('AI 接口请求超时，请检查接口地址与网络后重试。');
-	}
-
-	// 接口返回错误
-	if (response?.error?.message) {
-		throw new Error('AI 接口返回错误：' + response.error.message);
-	}
+		]
+	});
 
 	const content = extractAIContent(response);
 	if (!content) {
@@ -150,8 +308,8 @@ export async function aiAnswer(env: {
 	const answer = extractAnswerByType(content, env.type, env.blankCount);
 
 	return {
-		name: 'AI 大模型',
-		homepage: cfg.url,
+		name: `AI 大模型（${cfg.provider.name}）`,
+		homepage: cfg.endpoint,
 		results: [{ question: env.title, answer, extra_data: { ai: true } }]
 	};
 }
@@ -246,8 +404,8 @@ export async function aiAnswerFallback(
 		return [
 			...searchInfos,
 			{
-				name: 'AI 大模型',
-				homepage: cfg.url,
+				name: `AI 大模型（${cfg.provider.name}）`,
+				homepage: cfg.endpoint,
 				results: [],
 				error: (e as any)?.message || 'AI 接口连接失败'
 			}
@@ -269,8 +427,6 @@ export async function searchAnswersWithAI(
 	env: { type: string; title: string; options?: string; blankCount?: number }
 ): Promise<SearchInformation[]> {
 	const infos =
-		answererWrappers && answererWrappers.length !== 0
-			? await defaultAnswerWrapperHandler(answererWrappers, env)
-			: [];
+		answererWrappers && answererWrappers.length !== 0 ? await defaultAnswerWrapperHandler(answererWrappers, env) : [];
 	return aiAnswerFallback(env, infos);
 }

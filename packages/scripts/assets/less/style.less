@@ -309,6 +309,108 @@ script-panel-element + script-panel-element {
 	color: #8b8b8b;
 }
 
+/** AI 模型配置弹窗 */
+.ai-model-modal {
+	.ai-form-field {
+		margin-bottom: 12px;
+
+		&:first-child {
+			margin-top: 4px;
+		}
+	}
+
+	.ai-form-label {
+		color: #4e5969;
+		margin-bottom: 4px;
+
+		&:empty {
+			display: none;
+		}
+	}
+
+	.ai-form-row {
+		display: flex;
+		align-items: center;
+		width: 100%;
+	}
+
+	.ai-form-control {
+		.base-style-input();
+		.base-style-active-form-control();
+		font-size: inherit;
+		font-family: inherit;
+		box-sizing: border-box;
+	}
+
+	/** 与输入框同排的附属控件 */
+	.ai-key-actions {
+		display: flex;
+		align-items: center;
+		margin-left: 8px;
+		white-space: nowrap;
+	}
+
+	.ai-inline-btn {
+		width: 18px;
+		text-align: center;
+		cursor: pointer;
+		user-select: none;
+		padding: 0px 4px;
+		border-radius: 4px;
+		color: #8b8b8b;
+		margin-right: 8px;
+
+		&:hover {
+			background-color: #ebeef4;
+		}
+	}
+
+	.ai-test-btn {
+		margin-bottom: 0px;
+		padding: 4px 12px;
+		flex: none;
+	}
+
+	.ai-test-result {
+		margin-top: 4px;
+		min-height: 18px;
+		word-break: break-all;
+	}
+
+	.ai-test-success {
+		color: #3e8d0d;
+	}
+
+	.ai-test-error {
+		color: #c70208;
+	}
+
+	/** 供应商文档 / 获取 Key 链接 */
+	.ai-docs-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+		margin: -8px 0px 12px 0px;
+		font-size: 12px;
+
+		&:empty {
+			display: none;
+		}
+	}
+}
+
+/** 「查看文档」链接 */
+.ai-doc-link {
+	color: #1890ff;
+	cursor: pointer;
+	user-select: none;
+
+	&:hover {
+		text-decoration: underline;
+	}
+}
+
 .tooltip-container {
 	z-index: 99999999999999;
 	margin: 12px 0px 0px 12px;

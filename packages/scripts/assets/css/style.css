@@ -319,6 +319,111 @@ script-panel-element + script-panel-element {
   font-size: 12px;
   color: #8b8b8b;
 }
+/** AI 模型配置弹窗 */
+.ai-model-modal {
+  /** 与输入框同排的附属控件 */
+  /** 供应商文档 / 获取 Key 链接 */
+}
+.ai-model-modal .ai-form-field {
+  margin-bottom: 12px;
+}
+.ai-model-modal .ai-form-field:first-child {
+  margin-top: 4px;
+}
+.ai-model-modal .ai-form-label {
+  color: #4e5969;
+  margin-bottom: 4px;
+}
+.ai-model-modal .ai-form-label:empty {
+  display: none;
+}
+.ai-model-modal .ai-form-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+.ai-model-modal .ai-form-control {
+  outline: none;
+  padding: 2px 8px;
+  margin: 0px;
+  background-color: #eef2f7;
+  border-radius: 2px;
+  color: black;
+  border: 1px solid #ffffff00;
+  font-size: inherit;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.ai-model-modal .ai-form-control::placeholder {
+  color: #bababa;
+}
+.ai-model-modal .ai-form-control:focus {
+  border: 1px solid #0e8de290;
+  box-shadow: 0px 0px 4px #0e8de252;
+}
+.ai-model-modal .ai-form-control:focus:not([type='checkbox'], [type='radio']) {
+  border: 1px solid #0e8de290;
+  box-shadow: 0px 0px 4px #0e8de252;
+  background-color: white !important;
+}
+.ai-model-modal .ai-form-control:hover {
+  background-color: #ebeef4;
+}
+.ai-model-modal .ai-key-actions {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  white-space: nowrap;
+}
+.ai-model-modal .ai-inline-btn {
+  width: 18px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  padding: 0px 4px;
+  border-radius: 4px;
+  color: #8b8b8b;
+  margin-right: 8px;
+}
+.ai-model-modal .ai-inline-btn:hover {
+  background-color: #ebeef4;
+}
+.ai-model-modal .ai-test-btn {
+  margin-bottom: 0px;
+  padding: 4px 12px;
+  flex: none;
+}
+.ai-model-modal .ai-test-result {
+  margin-top: 4px;
+  min-height: 18px;
+  word-break: break-all;
+}
+.ai-model-modal .ai-test-success {
+  color: #3e8d0d;
+}
+.ai-model-modal .ai-test-error {
+  color: #c70208;
+}
+.ai-model-modal .ai-docs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -8px 0px 12px 0px;
+  font-size: 12px;
+}
+.ai-model-modal .ai-docs-row:empty {
+  display: none;
+}
+/** 「查看文档」链接 */
+.ai-doc-link {
+  color: #1890ff;
+  cursor: pointer;
+  user-select: none;
+}
+.ai-doc-link:hover {
+  text-decoration: underline;
+}
 .tooltip-container {
   z-index: 99999999999999;
   margin: 12px 0px 0px 12px;
